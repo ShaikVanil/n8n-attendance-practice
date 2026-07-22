@@ -1,0 +1,96 @@
+config:
+  target: 'http://localhost:3001'
+  phases:
+    # Gradual stress increase
+    - duration: 60
+      arrivalRate: 10
+      rampTo: 100
+      name: "Stress ramp-up"
+    # High stress sustained
+    - duration: 180
+      arrivalRate: 100
+      rampTo: 200
+      name: "High stress"
+    # Extreme stress
+    - duration: 120
+      arrivalRate: 200
+      rampTo: 500
+      name: "Extreme stress"
+    # Recovery
+    - duration: 60
+      arrivalRate: 500
+      rampTo: 10
+      name: "Recovery"
+  
+  processor: "./processors/stress-processor.js"
+  
+  defaults:
+    headers:
+      Content-Type: "application/json"
+
+scenarios:
+  - name: "Database Stress"
+    weight: 50
+    flow:
+      - function: "generateAuthToken"
+      # Rapid database operations
+      - loop:
+        - post:
+            url: "/api/attendance/checkin"
+            headers:
+              Authorization: "Bearer {{ authToken }}"
+            json:
+              deviceId: "stress-device-{{ $randomInt(1, 1000) }}"
+              location:
+                latitude: "{{ $randomFloat(40.0, 41.0) }}"
+                longitude: "{{ $randomFloat(-75.0, -73.0) }}"
+        - get:
+            url: "/api/attendance/history"
+            headers:
+              Authorization: "Bearer {{ authToken }}"
+            qs:
+              limit: "100"
+        count: 5
+  
+  - name: "Memory Stress"
+    weight: 30
+    flow:
+      - function: "generateAdminToken"
+      # Large data operations
+      - post:
+          url: "/api/reports/attendance"
+          headers:
+            Authorization: "Bearer {{ adminToken }}"
+          json:
+            startDate: "2023-01-01"
+            endDate: "2024-12-31"
+            includeDetails: true
+            format: "json"
+      - get:
+          url: "/api/users"
+          headers:
+            Authorization: "Bearer {{ adminToken }}"
+          qs:
+            limit: "1000"
+            includeAttendance: "true"
+  
+  - name: "Concurrent Operations"
+    weight: 20
+    flow:
+      - function: "generateAuthToken"
+      # Simulate concurrent user actions
+      - parallel:
+        - post:
+            url: "/api/attendance/checkin"
+            headers:
+              Authorization: "Bearer {{ authToken }}"
+            json:
+              deviceId: "concurrent-{{ $randomInt(1, 100) }}"
+        - get:
+            url: "/api/notifications"
+            headers:
+              Authorization: "Bearer {{ authToken }}"
+        - get:
+            url: "/api/attendance/status"
+            headers:
+              Authorization: "Bearer {{ authToken }}"

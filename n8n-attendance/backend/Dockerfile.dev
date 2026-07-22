@@ -1,0 +1,35 @@
+# Development environment
+FROM node:20-alpine
+
+# Install build dependencies and development tools
+RUN apk add --no-cache \
+    autoconf \
+    automake \
+    libtool \
+    make \
+    g++ \
+    python3 \
+    curl \
+    git
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY tsconfig*.json ./
+
+# Install all dependencies (including dev dependencies)
+RUN npm install
+
+# Copy source code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p uploads logs
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-3001}/health || exit 1
+
+# Start development server with hot reload
+CMD ["npm", "run", "dev"]

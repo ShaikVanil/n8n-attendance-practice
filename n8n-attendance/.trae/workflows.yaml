@@ -1,0 +1,10 @@
+workflows:
+  - name: BMAD-Method
+    description: Import of BMAD method workflows
+    steps:
+      - run: external/bmad/scripts/setup.sh
+      - agent: architect
+      - agent: analyst
+      - agent: developer
+      - agent: qa
+      - agent: devops

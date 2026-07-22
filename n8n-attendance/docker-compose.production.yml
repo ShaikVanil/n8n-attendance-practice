@@ -1,0 +1,113 @@
+services:
+  attendance-postgres-prod:
+    image: postgres:15-alpine
+    container_name: attendance-postgres-prod
+    env_file:
+      - .env.production
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C --lc-ctype=C --auth-host=md5 --auth-local=md5"
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./backend/src/database:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5433:5432"
+    networks:
+      - attendance-network-prod
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  attendance-backend-prod:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: attendance-backend-prod
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      DB_HOST: attendance-postgres-prod
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      PORT: ${PORT}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS}
+      LOG_LEVEL: info
+      ENABLE_METRICS: ${MONITORING_ENABLED}
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE}
+      UPLOAD_PATH: ${UPLOAD_PATH}
+      SESSION_SECRET: ${SESSION_SECRET}
+    ports:
+      - "${PORT}:${PORT}"
+    depends_on:
+      attendance-postgres-prod:
+        condition: service_healthy
+    networks:
+      - attendance-network-prod
+    restart: unless-stopped
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  attendance-frontend-prod:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: attendance-frontend-prod
+    env_file:
+      - .env.production
+    environment:
+      REACT_APP_API_URL: ${REACT_APP_API_URL}
+      REACT_APP_ENV: ${REACT_APP_ENV}
+    ports:
+      - "3002:80"  # Use port 3002 instead
+    depends_on:
+      - attendance-backend-prod
+    networks:
+      - attendance-network-prod
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data_prod:
+
+networks:
+  attendance-network-prod:
+    driver: bridge

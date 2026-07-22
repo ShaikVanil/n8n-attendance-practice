@@ -1,0 +1,75 @@
+services:
+  attendance-postgres-dev:
+    image: postgres:15
+    container_name: attendance-postgres-dev
+    env_file:
+      - .env.development  #Loads environment variables from .env.development.
+    environment:    
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--auth=md5 --local=en_US.UTF-8 --encoding=UTF8"
+      TZ: "UTC"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./backend/src/database:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5434:5432"
+    networks:
+      - attendance-dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  attendance-backend-dev:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: attendance-backend-dev
+    env_file:
+      - .env.development
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/package.json:/app/package.json
+      - ./backend/tsconfig.json:/app/tsconfig.json
+      - /app/node_modules
+    ports:
+      - "3001:3001"  # Fixed: Use explicit port mapping
+      - "9229:9229"  # Debug port
+    networks: 
+      - attendance-dev
+    depends_on:
+      attendance-postgres-dev:
+        condition: service_healthy
+    command: npm run dev
+    
+  attendance-frontend-dev:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: attendance-frontend-dev
+    env_file:
+      - .env.development
+    environment:
+      PORT: "3000"
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/package.json:/app/package.json
+    ports:
+      - "3002:3000"
+    networks:
+      - attendance-dev
+    depends_on:
+      - attendance-backend-dev
+    command: npm start
+
+volumes:
+  postgres_dev_data:
+
+networks:
+  attendance-dev:
+    driver: bridge
